@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
 from typing import List
 
@@ -9,6 +10,14 @@ import pandas as pd
 import shutil
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def create_node(node_ids: List[str], session_id: str, scalar=None, dataframe=None):
     if scalar is None and dataframe is None:
@@ -58,7 +67,7 @@ def init(session_name: str):
         }, f)
 
     # return session id
-    return session_id
+    return {session_id: session_id}
 
 @app.get("/session/{session_id}/metadata")
 def get_metadata(session_id: str):

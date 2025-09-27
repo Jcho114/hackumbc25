@@ -18,7 +18,12 @@ def init(session_name: str):
 
     # create metadata file (include name in file)
     with open(os.path.join(session_id, "metadata.json"), "w") as f:
-        json.dump({"session_name": session_name}, f)
+        json.dump({
+            "session_name": session_name,
+            "nodes": [],
+            "edges": [],
+            "scalar_map": {}
+        }, f)
 
     # return session id
     return session_id
@@ -81,7 +86,6 @@ def export(session_id: str, node_id: str):
 @app.post("/tools/sum")
 def tools_sum(dataset):
     # Sum (Dataset, column, [groupbycolumn]) -> Scalar
-
     pass
 
 
@@ -90,12 +94,25 @@ def tools_filter():
     pass
 
 
-@app.post("/tools/mean")
-def tools_mean():
-    pass
+@app.post("/tools/mean/{session_id}/{node_id},{column}")
+def tools_mean(session_id: str, node_id: str, column: str):
+    # find mean
+    try:
+        dataset = pd.read_csv(f"{session_id}/{node_id}")
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    mean = dataset[column].mean()
+
+    # create scalar node (metadata changes)
+    scalar_node_id = str(uuid4())
+    with open(os.path.join(session_id, "metadata.json")) as file:
+        metadata = json.loads(file.read())
+        metadata["nodes"].append(scalar_node_id)
+        metadata["scalar_map"][scalar_node_id] = mean
 
 
-@app.post("/tools/min")
+
+@app.post("/tools/{session_id}/min")
 def tools_min():
     pass
 

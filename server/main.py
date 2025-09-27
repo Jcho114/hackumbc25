@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
 
 import os
@@ -8,6 +9,14 @@ import pandas as pd
 import shutil
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.post("/session/init")
@@ -21,7 +30,7 @@ def init(session_name: str):
         json.dump({"session_name": session_name}, f)
 
     # return session id
-    return session_id
+    return {session_id: session_id}
 
 
 @app.get("/session/{session_id}/metadata")

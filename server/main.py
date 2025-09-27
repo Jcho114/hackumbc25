@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from uuid import uuid4
+from typing import List
 
 import os
 import json
@@ -9,6 +10,37 @@ import shutil
 
 app = FastAPI()
 
+def create_node(node_ids: List[str], session_id: str, scalar=None, dataframe=None):
+    """
+    Creates a node (scalar or dataframe) and appends the metadata.
+    - node_ids: List of parent node IDs (strings) that the new node will be connected to.
+    - scalar: The scalar value if it's a scalar node.
+    - dataframe: The dataframe if it's a dataframe node.
+    """
+    node_type = "scalar" if scalar is not None else "dataframe"
+    new_node_id = str(uuid4())
+    
+    try:
+        with open(os.path.join(session_id, "metadata.json")) as file:
+            metadata = json.loads(file.read())
+        # add the node
+        metadata["nodes"].append(new_node_id)
+        
+        # scalar map (dataframes stored in files)
+        if node_type == "scalar" and scalar is not None:
+            metadata["scalar_map"][new_node_id] = scalar
+
+        # create edges
+        for parent_node_id in node_ids:
+            metadata["edges"].append([parent_node_id, new_node_id])
+
+        with open(os.path.join(session_id, "metadata.json"), "w") as file:
+            json.dump(metadata, file)
+    
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return new_node_id
 
 @app.post("/session/init")
 def init(session_name: str):
@@ -82,46 +114,78 @@ def export(session_id: str, node_id: str):
 
     return FileResponse(file_path)
 
-
-@app.post("/tools/sum")
-def tools_sum(dataset):
-    # Sum (Dataset, column, [groupbycolumn]) -> Scalar
-    pass
-
-
 @app.post("/tools/filter")
 def tools_filter():
     pass
 
-
-@app.post("/tools/mean/{session_id}/{node_id},{column}")
-def tools_mean(session_id: str, node_id: str, column: str):
-    # find mean
+@app.post("/tools/sum/{session_id}/{node_id}/{column}")
+def tools_sum(session_id: str, node_id: str, column: str):
     try:
-        dataset = pd.read_csv(f"{session_id}/{node_id}")
+        # find sum
+        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    summation = dataset[column].sum()
+
+    # create scalar node (metadata changes)
+    create_node(scalar=summation, node_ids=[node_id], session_id=session_id)
+
+    return JSONResponse(content=summation, status_code=200)
+
+@app.post("/tools/mean/{session_id}/{node_id}/{column}")
+def tools_mean(session_id: str, node_id: str, column: str):
+    try:
+        # find mean
+        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
     mean = dataset[column].mean()
 
     # create scalar node (metadata changes)
-    scalar_node_id = str(uuid4())
-    with open(os.path.join(session_id, "metadata.json")) as file:
-        metadata = json.loads(file.read())
-        metadata["nodes"].append(scalar_node_id)
-        metadata["scalar_map"][scalar_node_id] = mean
+    create_node(scalar=mean, node_ids=[node_id], session_id=session_id)
+
+    return JSONResponse(content=mean, status_code=200)
 
 
+@app.post("/tools/min/{session_id}/{node_id}/{column}")
+def tools_min(session_id: str, node_id: str, column: str):
+    try:
+        # find min
+        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    min = dataset[column].min()
 
-@app.post("/tools/{session_id}/min")
-def tools_min():
-    pass
+    # create scalar node (metadata changes)
+    create_node(scalar=min, node_ids=[node_id], session_id=session_id)
+
+    return JSONResponse(content=min, status_code=200)
 
 
-@app.post("/tools/max")
-def tools_max():
-    pass
+@app.post("/tools/max/{session_id}/{node_id}/{column}")
+def tools_max(session_id: str, node_id: str, column: str):
+    try:   
+        # find max
+        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    max = dataset[column].max()
+
+    # create scalar node (metadata changes)
+    create_node(scalar=max, node_ids=[node_id], session_id=session_id)
+
+    return JSONResponse(content=max, status_code=200)
 
 
-@app.post("/tools/describe")
-def tools_describe():
-    pass
+@app.post("/tools/describe/{session_id}/{node_id}/{column}")
+def tools_describe(session_id: str, node_id: str, column: str):
+    try:
+        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    description = dataset[column].describe()
+
+    # create dataframe node (metadata changes)
+    create_node(dataframe=description, node_ids=[node_id], session_id=session_id)
+
+    return JSONResponse(content=description.to_dict(), status_code=200)

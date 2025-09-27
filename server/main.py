@@ -2,8 +2,7 @@ from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
-from typing import List
-
+from typing import Dict, Any
 import os
 import json
 import pandas as pd
@@ -19,70 +18,71 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def create_node(node_ids: List[str], session_id: str, scalar=None, dataframe=None):
-    if scalar is None and dataframe is None:
-        raise HTTPException(status_code=500, detail="create_node called incorrectly")
-    
+
+def load_metadata(session_id):
+    with open(os.path.join("sessions", session_id, "metadata.json")) as file:
+        metadata = json.loads(file.read())
+    return metadata
+
+
+def dump_metadata(metadata, session_id):
+    with open(os.path.join("sessions", session_id, "metadata.json"), "w") as file:
+        json.dump(metadata, file)
+
+
+def create_data_node(
+    session_id: str, dataframe: pd.DataFrame, metadata: Dict[str, Any]
+) -> str:
     new_node_id = str(uuid4())
-    
-    try:
-        with open(os.path.join(session_id, "metadata.json")) as file:
-            metadata = json.loads(file.read())
-        
-        # add the node
-        metadata["nodes"].append(new_node_id)
-        
-        # scalar map (dataframes stored in files)
-        if scalar is not None:
-            metadata["scalar_map"][new_node_id] = scalar
-        elif dataframe is not None:
-            # Create a new CSV file
-            dataframe.to_csv(os.path.join(session_id, f"{new_node_id}.csv"), index=False)
-
-        # create edges
-        for parent_node_id in node_ids:
-            metadata["edges"].append([parent_node_id, new_node_id])
-
-        with open(os.path.join(session_id, "metadata.json"), "w") as file:
-            json.dump(metadata, file)
-    
-    except Exception:
-        raise HTTPException(status_code=404, detail="File not found")
-    
+    metadata["nodes"].append(new_node_id)
+    dataframe.to_csv(
+        os.path.join("sessions", session_id, f"{new_node_id}.csv"), index=False
+    )
     return new_node_id
+
+
+def create_scalar_node(metadata, scalar) -> str:
+    new_node_id = str(uuid4())
+    metadata["nodes"].append(new_node_id)
+    metadata["scalar_map"][new_node_id] = scalar
+    return new_node_id
+
+
+def create_edge(metadata, src_id: str, dst_id: str, operation: str):
+    metadata["edges"].append(
+        {"src_id": src_id, "dst_id": dst_id, "operation": operation}
+    )
+
 
 @app.post("/session/init")
 def init(session_name: str):
-    # create session directory
     session_id = str(uuid4())
-    os.mkdir(session_id)
+    os.makedirs(f"sessions/{session_id}", exist_ok=True)
 
-    # create metadata file (include name in file)
-    with open(os.path.join(session_id, "metadata.json"), "w") as f:
-        json.dump({
-            "session_name": session_name,
-            "nodes": [],
-            "edges": [],
-            "scalar_map": {}
-        }, f)
+    with open(os.path.join("sessions", session_id, "metadata.json"), "w") as f:
+        json.dump(
+            {"session_name": session_name, "nodes": [], "edges": [], "scalar_map": {}},
+            f,
+        )
 
-    # return session id
-    return {session_id: session_id}
+    return {"session_id": session_id}
+
 
 @app.get("/session/{session_id}/metadata")
 def get_metadata(session_id: str):
-    file_path = f"{session_id}/metadata.json"
+    file_path = f"sessions/{session_id}/metadata.json"
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Metadata file not found")
 
-    with open(os.path.join(session_id, "metadata.json"), "r") as file:
+    with open(os.path.join("sessions", session_id, "metadata.json"), "r") as file:
         try:
             metadata = json.load(file)
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="Error decoding JSON from file")
 
     return JSONResponse(content=metadata)
+
 
 @app.post("/session/{session_id}/upload")
 def upload(session_id: str, file: UploadFile):
@@ -91,34 +91,35 @@ def upload(session_id: str, file: UploadFile):
         raise HTTPException(status_code=400, detail="File is not csv")
     # todo - check session id is valid
 
-    # make node id
     node_id = str(uuid4())
 
     try:
-        with open(os.path.join(session_id, f"{node_id}.csv"), "wb") as f:
+        with open(os.path.join("sessions", session_id, f"{node_id}.csv"), "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        with open(os.path.join(session_id, "metadata.json")) as f:
+        with open(os.path.join("sessions", session_id, "metadata.json")) as f:
             metadata = json.loads(f.read())
             if "nodes" not in metadata:
                 metadata["nodes"] = []
             metadata["nodes"].append(node_id)
 
-        with open(os.path.join(session_id, "metadata.json"), "w") as f:
+        with open(os.path.join("sessions", session_id, "metadata.json"), "w") as f:
             json.dump(metadata, f)
 
         return {"node_id": node_id}
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to upload file")
 
+
 @app.post("/session/{session_id}/export/{node_id}")
 def export(session_id: str, node_id: str):
-    file_path = os.path.join(session_id, f"{node_id}.csv")
+    file_path = os.path.join("sessions", session_id, f"{node_id}.csv")
 
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
 
     return FileResponse(file_path)
+
 
 # @app.post("/tools/filter/{session_id}/{node_id}/{column}")
 # def tools_filter(session_id: str, node_id: str, column):
@@ -133,84 +134,104 @@ def export(session_id: str, node_id: str):
 
 #     return JSONResponse(content=filtered.to_dict(), status_code=200)
 
-@app.post("/tools/sum/{session_id}/{node_id}/{column}")
+
+@app.post("/tools/sum")
 def tools_sum(session_id: str, node_id: str, column: str):
     try:
-        # find sum
-        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    summation = dataset[column].sum()
+    summation = float(dataset[column].sum())
 
-    # create scalar node (metadata changes)
-    create_node(scalar=summation, node_ids=[node_id], session_id=session_id)
+    metadata = load_metadata(session_id)
+    dst_node_id = create_scalar_node(metadata, summation)
+    create_edge(metadata, node_id, dst_node_id, "sum")
+    dump_metadata(metadata, session_id)
 
     return JSONResponse(content=summation, status_code=200)
 
-@app.post("/tools/mean/{session_id}/{node_id}/{column}")
+
+@app.post("/tools/mean")
 def tools_mean(session_id: str, node_id: str, column: str):
     try:
-        # find mean
-        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    mean = dataset[column].mean()
+    mean = float(dataset[column].mean())
 
-    # create scalar node (metadata changes)
-    create_node(scalar=mean, node_ids=[node_id], session_id=session_id)
+    metadata = load_metadata(session_id)
+    dst_node_id = create_scalar_node(metadata, mean)
+    create_edge(metadata, node_id, dst_node_id, "mean")
+    dump_metadata(metadata, session_id)
 
     return JSONResponse(content=mean, status_code=200)
 
-@app.post("/tools/min/{session_id}/{node_id}/{column}")
+
+@app.post("/tools/min")
 def tools_min(session_id: str, node_id: str, column: str):
     try:
-        # find min
-        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    min = dataset[column].min()
+    min = float(dataset[column].min())
 
-    # create scalar node (metadata changes)
-    create_node(scalar=min, node_ids=[node_id], session_id=session_id)
+    metadata = load_metadata(session_id)
+    dst_node_id = create_scalar_node(metadata, min)
+    create_edge(metadata, node_id, dst_node_id, "min")
+    dump_metadata(metadata, session_id)
 
     return JSONResponse(content=min, status_code=200)
 
-@app.post("/tools/max/{session_id}/{node_id}/{column}")
+
+@app.post("/tools/max")
 def tools_max(session_id: str, node_id: str, column: str):
-    try:   
-        # find max
-        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+    try:
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    max = dataset[column].max()
+    max = float(dataset[column].max())
 
-    # create scalar node (metadata changes)
-    create_node(scalar=max, node_ids=[node_id], session_id=session_id)
+    metadata = load_metadata(session_id)
+    dst_node_id = create_scalar_node(metadata, max)
+    create_edge(metadata, node_id, dst_node_id, "max")
+    dump_metadata(metadata, session_id)
 
     return JSONResponse(content=max, status_code=200)
 
-@app.post("/tools/describe/{session_id}/{node_id}/{column}")
+
+@app.post("/tools/describe")
 def tools_describe(session_id: str, node_id: str, column: str):
     try:
-        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
     description = dataset[column].describe()
 
-    # create dataframe node (metadata changes)
-    create_node(dataframe=description, node_ids=[node_id], session_id=session_id)
+    metadata = load_metadata(session_id)
+    dst_node_id = create_data_node(session_id, description, metadata)
+    create_edge(metadata, node_id, dst_node_id, "description")
+    dump_metadata(metadata, session_id)
 
     return JSONResponse(content=description.to_dict(), status_code=200)
 
-@app.post("/tools/value_counts/{session_id}/{node_id}/{column}")
+
+@app.post("/tools/value_counts")
 def tools_value_counts(session_id: str, node_id: str, column: str):
     try:
-        dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
     value_counts = dataset[column].value_counts()
 
-    # create dataframe node (metadata changes)
-    create_node(dataframe=value_counts, node_ids=[node_id], session_id=session_id)
+    metadata = load_metadata(session_id)
+    dst_node_id = create_data_node(session_id, value_counts, metadata)
+    create_edge(metadata, node_id, dst_node_id, "description")
+    dump_metadata(metadata, session_id)
 
     return JSONResponse(content=value_counts.to_dict(), status_code=200)

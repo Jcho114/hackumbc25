@@ -34,7 +34,7 @@ def create_data_node(
     session_id: str, dataframe: pd.DataFrame, metadata: Dict[str, Any]
 ) -> str:
     new_node_id = str(uuid4())
-    metadata["nodes"].append(new_node_id)
+    metadata["nodes"].append({"node_id": new_node_id, "type": "data"})
     dataframe.to_csv(
         os.path.join("sessions", session_id, f"{new_node_id}.csv"), index=False
     )
@@ -43,7 +43,7 @@ def create_data_node(
 
 def create_scalar_node(metadata, scalar) -> str:
     new_node_id = str(uuid4())
-    metadata["nodes"].append(new_node_id)
+    metadata["nodes"].append({"node_id": new_node_id, "type": "scalar"})
     metadata["scalar_map"][new_node_id] = scalar
     return new_node_id
 
@@ -101,7 +101,7 @@ def upload(session_id: str, file: UploadFile):
             metadata = json.loads(f.read())
             if "nodes" not in metadata:
                 metadata["nodes"] = []
-            metadata["nodes"].append(node_id)
+            metadata["nodes"].append({"node_id": node_id, "type": "data"})
 
         with open(os.path.join("sessions", session_id, "metadata.json"), "w") as f:
             json.dump(metadata, f)

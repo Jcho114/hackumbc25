@@ -45,11 +45,11 @@ const HomePage = () => {
         ...sessions,
         {
           name: sessionName,
-          id: result.sessionId,
+          id: result.session_id,
           accessed: new Date(),
         },
       ]);
-      navigate(`/dashboard/${result.sessionId}`);
+      navigate(`/dashboard/${result.session_id}`);
     },
   });
 

@@ -83,7 +83,7 @@ const NodeInfo = ({ nodeId }: NodeInfoProps) => {
     );
   }
 
-  if (data?.scalar) {
+  if (data?.scalar || data?.scalar === 0) {
     return (
       <div className="w-full h-full flex flex-col justify-center items-center">
         <h1 className="text-lg font-bold">{nodeInfo?.node_name}</h1>
@@ -92,7 +92,7 @@ const NodeInfo = ({ nodeId }: NodeInfoProps) => {
     );
   }
 
-  if (!data?.data) {
+  if (!data?.data || !data?.scalar) {
     return <p>Data not found</p>;
   }
 

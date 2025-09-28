@@ -18,7 +18,7 @@ def get_metadata(session_id: str):
 
 @mcp.tool
 def get_node_info(session_id: str, node_id: str):
-    """Returns the contents contained in the given node ID."""
+    """Returns the contents contained in the given node ID"""
     url = f"{BASE_URL}/session/{session_id}/node_info"
     params = {"session_id": session_id, "node_id": node_id}
     resp = requests.get(url, params=params)

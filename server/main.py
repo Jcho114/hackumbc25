@@ -276,6 +276,9 @@ def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
     create_edge(metadata, node_id, dst_node_id, f"min({column})")
     dump_metadata(metadata, session_id)
 
+    index = dataset[column].idxmin()
+    content = dataset.iloc[index]
+    content = content.where(pd.notnull(content), None).to_dict()
     return JSONResponse(content=content, status_code=200)
 
 
@@ -301,6 +304,9 @@ def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
     create_edge(metadata, node_id, dst_node_id, f"max({column})")
     dump_metadata(metadata, session_id)
 
+    index = dataset[column].idxmax()
+    content = dataset.iloc[index]
+    content = content.where(pd.notnull(content), None).to_dict()
     return JSONResponse(content=content, status_code=200)
 
 

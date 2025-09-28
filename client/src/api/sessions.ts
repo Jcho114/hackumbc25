@@ -37,3 +37,26 @@ export async function readSessionMetadata(sessionId: string) {
   const response = await api.get(`/session/${sessionId}/metadata`);
   return response.data as SessionMetadata;
 }
+
+export async function callSumDataTool(
+  sessionId: string,
+  nodeId: string,
+  column: string
+) {
+  const response = await api.post("/tools/sum", null, {
+    params: {
+      session_id: sessionId,
+      node_id: nodeId,
+      column: column,
+    },
+  });
+  return response.data as number;
+}
+
+export async function uploadCSV(sessionId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await api.post(`/session/${sessionId}/upload`, formData);
+  return response.data;
+}

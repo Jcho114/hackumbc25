@@ -1,45 +1,63 @@
+import { callSumDataTool } from "@/api/sessions";
 import {
   ContextMenu,
-  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuLabel,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { cn } from "@/lib/utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { NodeProps } from "@xyflow/react";
 import { Handle } from "@xyflow/react";
+import { useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 const GraphSessionNode = (props: NodeProps) => {
+  const { sessionId } = useParams();
+  const queryClient = useQueryClient();
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (column: string) => {
+      callSumDataTool(sessionId || "", props.id, column);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["metadata", sessionId],
+      });
+      toast("Successfully created Sum");
+    },
+  });
+
+  const handleSum = () => {
+    mutate("count");
+  };
+
   return (
     <ContextMenu>
-      <ContextMenuTrigger className="flex px-4 py-4 items-center justify-center rounded-md border border-dashed text-sm">
-        {props.id}
+      <ContextMenuTrigger
+        className={cn(
+          "border-solid flex px-4 py-4 w-[140px] h-[40px] items-center justify-center rounded-md border border-black",
+          isPending ? "animate-pulse" : ""
+        )}
+      >
+        <h1 className="text-sm truncate w-full text-center">{props.id}</h1>
         <Handle type="source" position="right" />
         <Handle type="target" position="left" />
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-52">
-        <ContextMenuItem inset>
-          Back
-          <ContextMenuShortcut>⌘[</ContextMenuShortcut>
+      <ContextMenuContent className="w-40">
+        <ContextMenuItem onClick={handleSum} inset>
+          Sum
         </ContextMenuItem>
-        <ContextMenuItem inset disabled>
-          Forward
-          <ContextMenuShortcut>⌘]</ContextMenuShortcut>
-        </ContextMenuItem>
-        <ContextMenuItem inset>
-          Reload
-          <ContextMenuShortcut>⌘R</ContextMenuShortcut>
-        </ContextMenuItem>
+        <ContextMenuItem inset>Mean</ContextMenuItem>
+        <ContextMenuItem inset>Min</ContextMenuItem>
         <ContextMenuSub>
           <ContextMenuSubTrigger inset>More Tools</ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-44">
+          <ContextMenuSubContent className="w-40">
             <ContextMenuItem>Save Page...</ContextMenuItem>
             <ContextMenuItem>Create Shortcut...</ContextMenuItem>
             <ContextMenuItem>Name Window...</ContextMenuItem>
@@ -49,19 +67,6 @@ const GraphSessionNode = (props: NodeProps) => {
             <ContextMenuItem variant="destructive">Delete</ContextMenuItem>
           </ContextMenuSubContent>
         </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuCheckboxItem checked>
-          Show Bookmarks
-        </ContextMenuCheckboxItem>
-        <ContextMenuCheckboxItem>Show Full URLs</ContextMenuCheckboxItem>
-        <ContextMenuSeparator />
-        <ContextMenuRadioGroup value="pedro">
-          <ContextMenuLabel inset>People</ContextMenuLabel>
-          <ContextMenuRadioItem value="pedro">
-            Pedro Duarte
-          </ContextMenuRadioItem>
-          <ContextMenuRadioItem value="colm">Colm Tuite</ContextMenuRadioItem>
-        </ContextMenuRadioGroup>
       </ContextMenuContent>
     </ContextMenu>
   );

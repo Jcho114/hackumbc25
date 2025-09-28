@@ -278,6 +278,39 @@ def tools_describe(session_id: str, node_id: str, column: str):
 
     return JSONResponse(content=description.to_dict(), status_code=200)
 
+@app.post("/tools/sample")
+def tools_sample(session_id: str, node_id: str, n: int):
+    try:
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    sample = dataset.sample(n)
+
+    metadata = load_metadata(session_id)
+    dst_node_id = create_data_node(session_id, sample, metadata)
+
+    create_edge(metadata, node_id, dst_node_id, "sample")
+    dump_metadata(metadata, session_id)
+
+    return JSONResponse(content=sample.to_dict(), status_code=200)
+
+@app.post("/tools/value_counts")
+def tools_value_counts(session_id: str, node_id: str, column: str):
+    try:
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    value_counts = dataset[column].value_counts()
+
+    metadata = load_metadata(session_id)
+    dst_node_id = create_data_node(session_id, value_counts, metadata)
+    create_edge(metadata, node_id, dst_node_id, "description")
+    dump_metadata(metadata, session_id)
+
+    return JSONResponse(content=value_counts.to_dict(), status_code=200)
 
 mcp_client = Client("http://localhost:9000/mcp")
 gemini_client = genai.Client()

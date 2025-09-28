@@ -68,6 +68,24 @@ def make_describe(session_id: str, node_id: str, column: str):
     resp.raise_for_status()
     return resp.json()
 
+@mcp.tool
+def make_sample(session_id: str, node_id: str, n: int):
+    """Returns a random sample of n rows of the data contained in the given node_id, and creates a corresponding data node with an edge coming from the given node_id, in the given session_id."""
+    url = f"{BASE_URL}/tools/sample"
+    params = {"session_id": session_id, "node_id": node_id, "n": n}
+    resp = requests.post(url, params=params)
+    resp.raise_for_status()
+    return resp.json()
+
+@mcp.tool
+def make_value_counts(session_id: str, node_id: str, column: str):
+    """Returns a list of the counts of unique values in the given column in data contained in the given node_id, and creates a corresponding data node with an edge coming from the given node_id, in the given session_id."""
+    url = f"{BASE_URL}/tools/value_counts"
+    params = {"session_id": session_id, "node_id": node_id, "column": column}
+    resp = requests.post(url, params=params)
+    resp.raise_for_status()
+    return resp.json()
+
 def main():
     mcp.run(transport="http", host="127.0.0.1", port=9000)
 

@@ -16,6 +16,7 @@ export async function createSession(sessionName: string) {
 export interface SessionNode {
   node_id: string;
   type: "data" | "scalar";
+  columns: string[] | null;
 }
 
 export interface SessionEdge {
@@ -63,5 +64,14 @@ export async function uploadCSV(sessionId: string, file: File) {
   formData.append("file", file);
 
   const response = await api.post(`/session/${sessionId}/upload`, formData);
+  return response.data;
+}
+
+export async function exportCSV(sessionId: string, nodeId: string) {
+  const response = await api.post(
+    `/session/${sessionId}/export/${nodeId}`,
+    null,
+    { responseType: "blob" }
+  );
   return response.data;
 }

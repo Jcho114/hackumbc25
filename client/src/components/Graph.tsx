@@ -26,6 +26,7 @@ function toGraphNodes(nodes: SessionNode[]) {
       type: "graphSessionNode",
       data: {
         label: node.node_id,
+        columns: node.columns || [],
       },
     };
   });

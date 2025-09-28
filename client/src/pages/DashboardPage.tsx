@@ -6,9 +6,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import Upload from "@/components/Upload";
+import { useState } from "react";
 
 const DashboardPage = () => {
   const { sessionId } = useParams();
+
+  const [refetchInterval, setRefetchInterval] = useState(false);
 
   const {
     data: metadata,
@@ -17,7 +20,7 @@ const DashboardPage = () => {
   } = useQuery({
     queryKey: ["metadata", sessionId],
     queryFn: async () => await readSessionMetadata(sessionId || ""),
-    refetchInterval: 3000,
+    refetchInterval: refetchInterval,
     staleTime: 0,
   });
 

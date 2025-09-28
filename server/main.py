@@ -152,7 +152,10 @@ def tools_filter(session_id: str, node_id: str, column, filter_operator: str, fi
     if filter_operator not in FILTER_OPERATORS:
         raise HTTPException(status_code=400, detail="Invalid operator")
     # trust
-    filtered = dataset[FILTER_OPERATORS[filter_operator](dataset[column], filter_value)]
+    try:
+        filtered = dataset[FILTER_OPERATORS[filter_operator](dataset[column], filter_value)]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Column is not a float")
 
     metadata = load_metadata(session_id)
     dst_node_id = create_data_node(session_id=session_id, dataframe=filtered, metadata=metadata)

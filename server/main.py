@@ -1,5 +1,5 @@
 from fastapi import FastAPI, UploadFile, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
 from typing import Dict, Any
@@ -153,6 +153,9 @@ def export(session_id: str, node_id: str):
 def tools_filter(
     session_id: str, node_id: str, column, filter_operator: str, filter_value: float
 ):
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -181,9 +184,8 @@ def tools_filter(
 @app.post("/tools/sum")
 def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
     metadata = load_metadata(session_id)
-    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
-        "type"
-    ] != "data":
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
@@ -209,10 +211,9 @@ def tools_mean(
     session_id: str, node_id: str, column: str, gb_col: Optional[str] = None
 ):
     metadata = load_metadata(session_id)
-    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
-        "type"
-    ] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot mean scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -235,10 +236,9 @@ def tools_mean(
 @app.post("/tools/min")
 def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
     metadata = load_metadata(session_id)
-    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
-        "type"
-    ] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot min scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -261,10 +261,9 @@ def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 @app.post("/tools/max")
 def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
     metadata = load_metadata(session_id)
-    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
-        "type"
-    ] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot max scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -287,10 +286,9 @@ def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 @app.post("/tools/describe")
 def tools_describe(session_id: str, node_id: str, column: str):
     metadata = load_metadata(session_id)
-    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
-        "type"
-    ] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot describe scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -307,6 +305,10 @@ def tools_describe(session_id: str, node_id: str, column: str):
 
 @app.post("/tools/sample")
 def tools_sample(session_id: str, node_id: str, n: int):
+    metadata = load_metadata(session_id)
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sample scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -326,6 +328,10 @@ def tools_sample(session_id: str, node_id: str, n: int):
 
 @app.post("/tools/value_counts")
 def tools_value_counts(session_id: str, node_id: str, column: str):
+    metadata = load_metadata(session_id)
+    node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
+    if node["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot value count scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -382,15 +388,19 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
         f"Instruction: {prompt}"
     )
 
-    async with mcp_client:
-        response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.0-flash-lite",
-            contents=prompt_text,
-            config=genai.types.GenerateContentConfig(
-                temperature=0,
-                tools=[mcp_client.session],
-            ),
-        )
+    async def gemini_stream():
+        async with mcp_client:
+            async for event in await gemini_client.aio.models.generate_content_stream(
+                model="gemini-2.0-flash-lite",
+                contents=prompt_text,
+                config=genai.types.GenerateContentConfig(
+                    temperature=0,
+                    tools=[mcp_client.session],
+                ),
+            ):
+                if event.candidates:
+                    for part in event.candidates[0].content.parts:
+                        if part.text:
+                            yield part.text
 
-    text_output = response.text
-    return JSONResponse(content={"response": text_output}, status_code=200)
+    return StreamingResponse(gemini_stream(), media_type="text/plain")

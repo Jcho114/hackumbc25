@@ -50,6 +50,11 @@ export async function callSumDataTool(
       column: column,
     },
   });
+
+  if (response.status != 200) {
+    throw new Error(response.data["detail"]);
+  }
+
   return response.data as number;
 }
 

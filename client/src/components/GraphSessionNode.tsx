@@ -23,13 +23,16 @@ const GraphSessionNode = (props: NodeProps) => {
 
   const { mutate, isPending, error } = useMutation({
     mutationFn: async (column: string) => {
-      callSumDataTool(sessionId || "", props.id, column);
+      await callSumDataTool(sessionId || "", props.id, column);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["metadata", sessionId],
       });
-      toast("Successfully created Sum");
+      toast.success("Successfully created Sum");
+    },
+    onError: async () => {
+      toast.error("Failed to create Sum");
     },
   });
 

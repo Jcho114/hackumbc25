@@ -31,7 +31,7 @@ const Upload = () => {
       await queryClient.invalidateQueries({
         queryKey: ["metadata", sessionId],
       });
-      toast("Successfully uploaded csv");
+      toast.success("Successfully uploaded csv");
     },
     onError: () => toast.error(`Something went wrong when uploading csv`),
   });

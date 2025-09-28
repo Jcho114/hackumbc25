@@ -23,13 +23,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 FILTER_OPERATORS = {
-    'lt': lambda x, value: x < value,
-    'gt': lambda x, value: x > value,
-    'eq': lambda x, value: x == value,
-    'ne': lambda x, value: x != value,
-    'le': lambda x, value: x <= value,
-    'ge': lambda x, value: x >= value,
+    "lt": lambda x, value: x < value,
+    "gt": lambda x, value: x > value,
+    "eq": lambda x, value: x == value,
+    "ne": lambda x, value: x != value,
+    "le": lambda x, value: x <= value,
+    "ge": lambda x, value: x >= value,
 }
+
 
 def load_metadata(session_id):
     with open(os.path.join("sessions", session_id, "metadata.json")) as file:
@@ -40,6 +41,8 @@ def load_metadata(session_id):
 def dump_metadata(metadata, session_id):
     with open(os.path.join("sessions", session_id, "metadata.json"), "w") as file:
         json.dump(metadata, file)
+        file.flush()
+        os.fsync(file.fileno())
 
 
 def create_data_node(
@@ -79,6 +82,7 @@ def init(session_name: str):
 
     return {"session_id": session_id}
 
+
 @app.get("/session/{session_id}/metadata")
 def get_metadata(session_id: str):
     file_path = f"sessions/{session_id}/metadata.json"
@@ -94,13 +98,14 @@ def get_metadata(session_id: str):
 
     return JSONResponse(content=metadata)
 
+
 @app.get("/session/{session_id}/node_info")
 def get_node_info(session_id: str, node_id: str):
     node_file_path = os.path.join("sessions", session_id, f"{node_id}.csv")
     if not os.path.exists(node_file_path):
         raise HTTPException(status_code=404, detail="File not found")
     data = []
-    with open(node_file_path, mode='r', newline='', encoding='utf-8') as csv_file:
+    with open(node_file_path, mode="r", newline="", encoding="utf-8") as csv_file:
         csv_reader = csv.DictReader(csv_file)
         for row in csv_reader:
             data.append(row)
@@ -133,6 +138,7 @@ def upload(session_id: str, file: UploadFile):
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to upload file")
 
+
 @app.post("/session/{session_id}/export/{node_id}")
 def export(session_id: str, node_id: str):
     file_path = os.path.join("sessions", session_id, f"{node_id}.csv")
@@ -142,8 +148,11 @@ def export(session_id: str, node_id: str):
 
     return FileResponse(file_path)
 
+
 @app.post("/tools/filter/")
-def tools_filter(session_id: str, node_id: str, column, filter_operator: str, filter_value: float):
+def tools_filter(
+    session_id: str, node_id: str, column, filter_operator: str, filter_value: float
+):
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -153,21 +162,28 @@ def tools_filter(session_id: str, node_id: str, column, filter_operator: str, fi
         raise HTTPException(status_code=400, detail="Invalid operator")
     # trust
     try:
-        filtered = dataset[FILTER_OPERATORS[filter_operator](dataset[column], filter_value)]
+        filtered = dataset[
+            FILTER_OPERATORS[filter_operator](dataset[column], filter_value)
+        ]
     except Exception:
         raise HTTPException(status_code=400, detail="Column is not a float")
 
     metadata = load_metadata(session_id)
-    dst_node_id = create_data_node(session_id=session_id, dataframe=filtered, metadata=metadata)
+    dst_node_id = create_data_node(
+        session_id=session_id, dataframe=filtered, metadata=metadata
+    )
     create_edge(metadata, node_id, dst_node_id, "filter")
     dump_metadata(metadata, session_id)
 
     return JSONResponse(content=filtered.to_dict(), status_code=200)
 
+
 @app.post("/tools/sum")
 def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
     metadata = load_metadata(session_id)
-    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
+        "type"
+    ] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
@@ -189,16 +205,20 @@ def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 
 
 @app.post("/tools/mean")
-def tools_mean(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
+def tools_mean(
+    session_id: str, node_id: str, column: str, gb_col: Optional[str] = None
+):
     metadata = load_metadata(session_id)
-    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
+        "type"
+    ] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     if gb_col is not None:
         gb_mean = pd.DataFrame(dataset.groupby(gb_col)[column].mean())
         dst_node_id = create_data_node(session_id, gb_mean, metadata)
@@ -215,14 +235,16 @@ def tools_mean(session_id: str, node_id: str, column: str, gb_col: Optional[str]
 @app.post("/tools/min")
 def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
     metadata = load_metadata(session_id)
-    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
+        "type"
+    ] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     if gb_col is not None:
         gb_min = pd.DataFrame(dataset.groupby(gb_col)[column].min())
         dst_node_id = create_data_node(session_id, gb_min, metadata)
@@ -239,7 +261,9 @@ def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 @app.post("/tools/max")
 def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
     metadata = load_metadata(session_id)
-    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
+        "type"
+    ] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
@@ -263,7 +287,9 @@ def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 @app.post("/tools/describe")
 def tools_describe(session_id: str, node_id: str, column: str):
     metadata = load_metadata(session_id)
-    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+    if [node for node in metadata["nodes"] if node["node_id"] == node_id][0][
+        "type"
+    ] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
@@ -278,6 +304,7 @@ def tools_describe(session_id: str, node_id: str, column: str):
 
     return JSONResponse(content=description.to_dict(), status_code=200)
 
+
 @app.post("/tools/sample")
 def tools_sample(session_id: str, node_id: str, n: int):
     try:
@@ -285,7 +312,7 @@ def tools_sample(session_id: str, node_id: str, n: int):
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    
+
     sample = dataset.sample(n)
 
     metadata = load_metadata(session_id)
@@ -295,6 +322,7 @@ def tools_sample(session_id: str, node_id: str, n: int):
     dump_metadata(metadata, session_id)
 
     return JSONResponse(content=sample.to_dict(), status_code=200)
+
 
 @app.post("/tools/value_counts")
 def tools_value_counts(session_id: str, node_id: str, column: str):
@@ -312,8 +340,10 @@ def tools_value_counts(session_id: str, node_id: str, column: str):
 
     return JSONResponse(content=value_counts.to_dict(), status_code=200)
 
+
 mcp_client = Client("http://localhost:9000/mcp")
 gemini_client = genai.Client()
+
 
 @app.post("/gemini")
 async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
@@ -330,23 +360,21 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
             if os.path.exists(filepath):
                 try:
                     df = pd.read_csv(filepath, nrows=sample_rows)
-                    node_summaries.append({
-                        "node_id": node_id,
-                        "columns": df.columns.tolist(),
-                        "sample_data": df.head(sample_rows).to_dict(orient="list"),
-                        "num_rows": len(df)
-                    })
+                    node_summaries.append(
+                        {
+                            "node_id": node_id,
+                            "columns": df.columns.tolist(),
+                            "sample_data": df.head(sample_rows).to_dict(orient="list"),
+                            "num_rows": len(df),
+                        }
+                    )
                 except Exception:
-                    node_summaries.append({
-                        "node_id": node_id,
-                        "error": "Could not read CSV"
-                    })
+                    node_summaries.append(
+                        {"node_id": node_id, "error": "Could not read CSV"}
+                    )
         elif node_type == "scalar":
             scalar_value = metadata.get("scalar_map", {}).get(node_id, None)
-            node_summaries.append({
-                "node_id": node_id,
-                "scalar_value": scalar_value
-            })
+            node_summaries.append({"node_id": node_id, "scalar_value": scalar_value})
 
     prompt_text = (
         f"Session ID: {session_id}\n"

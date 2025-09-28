@@ -97,8 +97,6 @@ def delete_node_helper(session_id: str, node_id: str, metadata):
     node_file_path = os.path.join(base_path, f"{node_id}.csv") 
     if os.path.exists(node_file_path):
         os.remove(node_file_path)
-    else:
-        raise HTTPException(status_code=404, detail=f"{node_file_path} Node file doesn't exist")
 
 @app.post("/session/init")
 def init(session_name: str):
@@ -463,10 +461,10 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
 
 @app.post("/tools/delete_node")
 def delete_node(session_id: str, node_id: str):
-    try:
+    # try:
         metadata = load_metadata(session_id)
         delete_node_helper(session_id, node_id, metadata)
         dump_metadata(session_id=session_id, metadata=metadata)
         return JSONResponse(content="Node successfully deleted",status_code=200)
-    except Exception:
-        raise HTTPException(status_code=404, detail="File not found")
+    # except Exception:
+    #     raise HTTPException(status_code=404, detail="File not found")

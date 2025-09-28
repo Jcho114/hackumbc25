@@ -76,3 +76,17 @@ export async function exportCSV(sessionId: string, nodeId: string) {
   );
   return response.data;
 }
+
+interface NodeEntry {
+  [key: string]: string;
+}
+type NodeContents = NodeEntry[];
+
+export async function getNodeContents(sessionId: string, nodeId: string) {
+  const response = await api.get(`/session/${sessionId}/node_info`, {
+    params: {
+      node_id: nodeId,
+    },
+  });
+  return response.data as NodeContents;
+}

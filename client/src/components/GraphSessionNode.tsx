@@ -10,6 +10,16 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { NodeProps } from "@xyflow/react";
@@ -17,6 +27,7 @@ import { Handle } from "@xyflow/react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { saveAs } from "file-saver";
+import NodeInfo from "@/components/NodeInfo";
 
 const GraphSessionNode = (props: NodeProps) => {
   const { sessionId } = useParams();
@@ -67,12 +78,17 @@ const GraphSessionNode = (props: NodeProps) => {
     <ContextMenu>
       <ContextMenuTrigger
         className={cn(
-          "border-solid flex px-4 py-4 w-[160px] h-[40px] items-center justify-center rounded-md border border-black"
+          "border-solid flex px-4 py-4 w-[170px] h-[40px] items-center justify-center rounded-md border border-black"
         )}
       >
-        <h1 className="truncate w-full text-center text-xs">
-          {props.data.label}
-        </h1>
+        <Dialog>
+          <DialogTrigger className="w-[160px] h-[40px] flex items-center justify-center">
+            <h1 className="truncate text-center text-xs">{props.data.label}</h1>
+          </DialogTrigger>
+          <DialogContent className="min-w-[50vw]">
+            <NodeInfo nodeId={props.id} />
+          </DialogContent>
+        </Dialog>
         <Handle type="source" position="right" />
         <Handle type="target" position="left" />
       </ContextMenuTrigger>

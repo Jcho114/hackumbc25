@@ -7,6 +7,10 @@ import os
 import json
 import pandas as pd
 import shutil
+import csv
+
+from fastmcp import Client
+from google import genai
 
 app = FastAPI()
 
@@ -82,6 +86,18 @@ def get_metadata(session_id: str):
             raise HTTPException(status_code=500, detail="Error decoding JSON from file")
 
     return JSONResponse(content=metadata)
+
+@app.get("/session/{session_id}/node_info")
+def get_node_info(session_id: str, node_id: str):
+    node_file_path = os.path.join("sessions", session_id, f"{node_id}.csv")
+    if not os.path.exists(node_file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    data = []
+    with open(node_file_path, mode='r', newline='', encoding='utf-8') as csv_file:
+        csv_reader = csv.DictReader(csv_file)
+        for row in csv_reader:
+            data.append(row)
+    return JSONResponse(data, status_code=200)
 
 
 @app.post("/session/{session_id}/upload")
@@ -220,18 +236,58 @@ def tools_describe(session_id: str, node_id: str, column: str):
     return JSONResponse(content=description.to_dict(), status_code=200)
 
 
-@app.post("/tools/value_counts")
-def tools_value_counts(session_id: str, node_id: str, column: str):
-    try:
-        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
-        dataset = pd.read_csv(filepath)
-    except Exception:
-        raise HTTPException(status_code=404, detail="File not found")
-    value_counts = dataset[column].value_counts()
+mcp_client = Client("http://localhost:9000/mcp")
+gemini_client = genai.Client()
 
+@app.post("/gemini")
+async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
+    # Load session metadata
     metadata = load_metadata(session_id)
-    dst_node_id = create_data_node(session_id, value_counts, metadata)
-    create_edge(metadata, node_id, dst_node_id, "description")
-    dump_metadata(metadata, session_id)
 
-    return JSONResponse(content=value_counts.to_dict(), status_code=200)
+    node_summaries = []
+
+    for node in metadata.get("nodes", []):
+        node_id = node["node_id"]
+        node_type = node["type"]
+
+        if node_type == "data":
+            filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+            if os.path.exists(filepath):
+                try:
+                    df = pd.read_csv(filepath, nrows=sample_rows)
+                    node_summaries.append({
+                        "node_id": node_id,
+                        "columns": df.columns.tolist(),
+                        "sample_data": df.head(sample_rows).to_dict(orient="list"),
+                        "num_rows": len(df)
+                    })
+                except Exception:
+                    node_summaries.append({
+                        "node_id": node_id,
+                        "error": "Could not read CSV"
+                    })
+        elif node_type == "scalar":
+            scalar_value = metadata.get("scalar_map", {}).get(node_id, None)
+            node_summaries.append({
+                "node_id": node_id,
+                "scalar_value": scalar_value
+            })
+
+    prompt_text = (
+        f"Session ID: {session_id}\n"
+        f"Node summaries: {node_summaries}\n"
+        f"Instruction: {prompt}"
+    )
+
+    async with mcp_client:
+        response = await gemini_client.aio.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=prompt_text,
+            config=genai.types.GenerateContentConfig(
+                temperature=0,
+                tools=[mcp_client.session],
+            ),
+        )
+
+    text_output = response.text
+    return JSONResponse(content={"response": text_output}, status_code=200)

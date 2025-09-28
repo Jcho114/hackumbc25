@@ -87,6 +87,18 @@ def get_metadata(session_id: str):
 
     return JSONResponse(content=metadata)
 
+@app.get("/session/{session_id}/node_info")
+def get_node_info(session_id: str, node_id: str):
+    node_file_path = os.path.join("sessions", session_id, f"{node_id}.csv")
+    if not os.path.exists(node_file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    data = []
+    with open(node_file_path, mode='r', newline='', encoding='utf-8') as csv_file:
+        csv_reader = csv.DictReader(csv_file)
+        for row in csv_reader:
+            data.append(row)
+    return JSONResponse(data, status_code=200)
+
 
 @app.post("/session/{session_id}/upload")
 def upload(session_id: str, file: UploadFile):
@@ -228,15 +240,54 @@ mcp_client = Client("http://localhost:9000/mcp")
 gemini_client = genai.Client()
 
 @app.post("/gemini")
-async def call_gemini(session_id: str, prompt: str):
+async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
+    # Load session metadata
+    metadata = load_metadata(session_id)
+
+    node_summaries = []
+
+    for node in metadata.get("nodes", []):
+        node_id = node["node_id"]
+        node_type = node["type"]
+
+        if node_type == "data":
+            filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+            if os.path.exists(filepath):
+                try:
+                    df = pd.read_csv(filepath, nrows=sample_rows)
+                    node_summaries.append({
+                        "node_id": node_id,
+                        "columns": df.columns.tolist(),
+                        "sample_data": df.head(sample_rows).to_dict(orient="list"),
+                        "num_rows": len(df)
+                    })
+                except Exception:
+                    node_summaries.append({
+                        "node_id": node_id,
+                        "error": "Could not read CSV"
+                    })
+        elif node_type == "scalar":
+            scalar_value = metadata.get("scalar_map", {}).get(node_id, None)
+            node_summaries.append({
+                "node_id": node_id,
+                "scalar_value": scalar_value
+            })
+
+    prompt_text = (
+        f"Session ID: {session_id}\n"
+        f"Node summaries: {node_summaries}\n"
+        f"Instruction: {prompt}"
+    )
+
     async with mcp_client:
         response = await gemini_client.aio.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=f"The session ID is {session_id}. The metadata you get from this session ID contains the list of current node IDs and all of their relationships as edges. Please consider this information, and use the node IDs to find out information on the contents of these nodes. Use this information as context to the following prompt. {prompt}",
+            model="gemini-2.0-flash-lite",
+            contents=prompt_text,
             config=genai.types.GenerateContentConfig(
                 temperature=0,
                 tools=[mcp_client.session],
             ),
         )
-        text_output = response.text
-        return JSONResponse(content={"response": text_output}, status_code=200)
+
+    text_output = response.text
+    return JSONResponse(content={"response": text_output}, status_code=200)

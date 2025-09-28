@@ -1,3 +1,4 @@
+import io
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,7 +7,6 @@ from typing import Dict, Any
 import os
 import json
 import pandas as pd
-import shutil
 import csv
 from typing import Optional
 
@@ -49,7 +49,9 @@ def create_data_node(
     session_id: str, dataframe: pd.DataFrame, metadata: Dict[str, Any]
 ) -> str:
     new_node_id = str(uuid4())
-    metadata["nodes"].append({"node_id": new_node_id, "type": "data"})
+    metadata["nodes"].append(
+        {"node_id": new_node_id, "type": "data", "columns": list(dataframe.columns)}
+    )
     dataframe.to_csv(
         os.path.join("sessions", session_id, f"{new_node_id}.csv"), index=False
     )
@@ -113,23 +115,27 @@ def get_node_info(session_id: str, node_id: str):
 
 
 @app.post("/session/{session_id}/upload")
-def upload(session_id: str, file: UploadFile):
-    # todo - do csv check
+async def upload(session_id: str, file: UploadFile):
     if file.content_type != "text/csv":
         raise HTTPException(status_code=400, detail="File is not csv")
     # todo - check session id is valid
+
+    contents = await file.read()
+    dataframe = pd.read_csv(io.StringIO(contents.decode("utf-8")))
 
     node_id = str(uuid4())
 
     try:
         with open(os.path.join("sessions", session_id, f"{node_id}.csv"), "wb") as f:
-            shutil.copyfileobj(file.file, f)
+            f.write(contents)
 
         with open(os.path.join("sessions", session_id, "metadata.json")) as f:
             metadata = json.loads(f.read())
             if "nodes" not in metadata:
                 metadata["nodes"] = []
-            metadata["nodes"].append({"node_id": node_id, "type": "data"})
+            metadata["nodes"].append(
+                {"node_id": node_id, "type": "data", "columns": list(dataframe.columns)}
+            )
 
         with open(os.path.join("sessions", session_id, "metadata.json"), "w") as f:
             json.dump(metadata, f)
@@ -198,7 +204,7 @@ def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
     else:
         content = float(dataset[column].sum())
         dst_node_id = create_scalar_node(metadata, content)
-    create_edge(metadata, node_id, dst_node_id, "sum")
+    create_edge(metadata, node_id, dst_node_id, f"sum({column})")
     dump_metadata(metadata, session_id)
 
     return JSONResponse(content=content, status_code=200)
@@ -226,7 +232,7 @@ def tools_mean(
     else:
         content = float(dataset[column].mean())
         dst_node_id = create_scalar_node(metadata, content)
-    create_edge(metadata, node_id, dst_node_id, "mean")
+    create_edge(metadata, node_id, dst_node_id, f"mean({column})")
     dump_metadata(metadata, session_id)
 
     return JSONResponse(content=content, status_code=200)
@@ -252,7 +258,7 @@ def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
     else:
         content = float(dataset[column].min())
         dst_node_id = create_scalar_node(metadata, content)
-    create_edge(metadata, node_id, dst_node_id, "min")
+    create_edge(metadata, node_id, dst_node_id, f"min({column})")
     dump_metadata(metadata, session_id)
 
     return JSONResponse(content=content, status_code=200)
@@ -278,7 +284,7 @@ def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
     else:
         content = float(dataset[column].max())
         dst_node_id = create_scalar_node(metadata, content)
-    create_edge(metadata, node_id, dst_node_id, "max")
+    create_edge(metadata, node_id, dst_node_id, f"max({column})")
     dump_metadata(metadata, session_id)
 
     return JSONResponse(content=content, status_code=200)

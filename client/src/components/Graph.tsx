@@ -1,11 +1,13 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   ReactFlow,
   type Node,
   type Edge,
   applyNodeChanges,
   applyEdgeChanges,
-  addEdge,
+  useNodesState,
+  useEdgesState,
+  ConnectionLineType,
 } from "@xyflow/react";
 import type { SessionEdge, SessionMetadata, SessionNode } from "@/api/sessions";
 import dagre from "@dagrejs/dagre";
@@ -22,7 +24,9 @@ function toGraphNodes(nodes: SessionNode[]) {
       id: node.node_id,
       position: { x: Math.random() * 1000, y: Math.random() * 800 },
       type: "graphSessionNode",
-      data: { label: node.node_id },
+      data: {
+        label: node.node_id,
+      },
     };
   });
 }
@@ -38,6 +42,11 @@ function toGraphEdges(edges: SessionEdge[]) {
       type: "arrowclosed",
       color: "black",
     },
+    labelStyle: {
+      fontSize: 12,
+      fontWeight: 500,
+      fill: "#000",
+    },
   }));
 }
 
@@ -45,11 +54,12 @@ const dagreGraph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
 const nodeWidth = 300;
 const nodeHeight = 36;
 
-const getLayoutedElements = (
-  nodes: Node[],
-  edges: Edge[],
+export const getLayoutedElements = (
+  metadata: SessionMetadata,
   direction = "LR"
 ) => {
+  const nodes = toGraphNodes(metadata.nodes);
+  const edges = toGraphEdges(metadata.edges);
   const isHorizontal = direction === "LR";
   dagreGraph.setGraph({ rankdir: direction });
 
@@ -86,38 +96,28 @@ const nodeTypes = {
 };
 
 const Graph = ({ metadata }: GraphProps) => {
-  const { nodes: initialNodes, edges: initialEdges } = getLayoutedElements(
-    toGraphNodes(metadata.nodes),
-    toGraphEdges(metadata.edges)
-  );
-  const [nodes, setNodes] = useState(initialNodes);
-  const [edges, setEdges] = useState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  const onNodesChange = useCallback(
-    (changes) =>
-      setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
-    []
-  );
-  const onEdgesChange = useCallback(
-    (changes) =>
-      setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot)),
-    []
-  );
-  const onConnect = useCallback(
-    (params) => setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot)),
-    []
-  );
+  useEffect(() => {
+    const { nodes, edges } = getLayoutedElements(metadata);
+    setNodes(nodes);
+    setEdges(edges);
+  }, [metadata]);
 
   return (
-    <div className="w-full h-full justify-center items-center bg-gray-50">
+    <div className="absolute w-full h-full justify-center items-center">
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        connectionLineType={ConnectionLineType.SmoothStep}
         minZoom={0.1}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        edgesFocusable={false}
         fitView
       />
     </div>

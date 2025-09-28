@@ -8,6 +8,7 @@ import json
 import pandas as pd
 import shutil
 import csv
+from typing import Optional
 
 from fastmcp import Client
 from google import genai
@@ -152,75 +153,106 @@ def export(session_id: str, node_id: str):
 
 
 @app.post("/tools/sum")
-def tools_sum(session_id: str, node_id: str, column: str):
+def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
+    metadata = load_metadata(session_id)
+    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    summation = float(dataset[column].sum())
 
-    metadata = load_metadata(session_id)
-    dst_node_id = create_scalar_node(metadata, summation)
+    if gb_col is not None:
+        gb_sum = pd.DataFrame(dataset.groupby(gb_col)[column].sum())
+        dst_node_id = create_data_node(session_id, gb_sum, metadata)
+        content = gb_sum.to_dict()
+    else:
+        content = float(dataset[column].sum())
+        dst_node_id = create_scalar_node(metadata, content)
     create_edge(metadata, node_id, dst_node_id, "sum")
     dump_metadata(metadata, session_id)
 
-    return JSONResponse(content=summation, status_code=200)
+    return JSONResponse(content=content, status_code=200)
 
 
 @app.post("/tools/mean")
-def tools_mean(session_id: str, node_id: str, column: str):
+def tools_mean(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
+    metadata = load_metadata(session_id)
+    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    mean = float(dataset[column].mean())
-
-    metadata = load_metadata(session_id)
-    dst_node_id = create_scalar_node(metadata, mean)
+    
+    if gb_col is not None:
+        gb_mean = pd.DataFrame(dataset.groupby(gb_col)[column].mean())
+        dst_node_id = create_data_node(session_id, gb_mean, metadata)
+        content = gb_mean.to_dict()
+    else:
+        content = float(dataset[column].mean())
+        dst_node_id = create_scalar_node(metadata, content)
     create_edge(metadata, node_id, dst_node_id, "mean")
     dump_metadata(metadata, session_id)
 
-    return JSONResponse(content=mean, status_code=200)
+    return JSONResponse(content=content, status_code=200)
 
 
 @app.post("/tools/min")
-def tools_min(session_id: str, node_id: str, column: str):
+def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
+    metadata = load_metadata(session_id)
+    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    min = float(dataset[column].min())
-
-    metadata = load_metadata(session_id)
-    dst_node_id = create_scalar_node(metadata, min)
+    
+    if gb_col is not None:
+        gb_min = pd.DataFrame(dataset.groupby(gb_col)[column].min())
+        dst_node_id = create_data_node(session_id, gb_min, metadata)
+        content = gb_min.to_dict()
+    else:
+        content = float(dataset[column].min())
+        dst_node_id = create_scalar_node(metadata, content)
     create_edge(metadata, node_id, dst_node_id, "min")
     dump_metadata(metadata, session_id)
 
-    return JSONResponse(content=min, status_code=200)
+    return JSONResponse(content=content, status_code=200)
 
 
 @app.post("/tools/max")
-def tools_max(session_id: str, node_id: str, column: str):
+def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):
+    metadata = load_metadata(session_id)
+    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found")
-    max = float(dataset[column].max())
 
-    metadata = load_metadata(session_id)
-    dst_node_id = create_scalar_node(metadata, max)
+    if gb_col is not None:
+        gb_max = pd.DataFrame(dataset.groupby(gb_col)[column].max())
+        dst_node_id = create_data_node(session_id, gb_max, metadata)
+        content = gb_max.to_dict()
+    else:
+        content = float(dataset[column].max())
+        dst_node_id = create_scalar_node(metadata, content)
     create_edge(metadata, node_id, dst_node_id, "max")
     dump_metadata(metadata, session_id)
 
-    return JSONResponse(content=max, status_code=200)
+    return JSONResponse(content=content, status_code=200)
 
 
 @app.post("/tools/describe")
 def tools_describe(session_id: str, node_id: str, column: str):
+    metadata = load_metadata(session_id)
+    if metadata["nodes"][metadata["nodes"].index(node_id)]["type"] != "data":
+        raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -228,7 +260,6 @@ def tools_describe(session_id: str, node_id: str, column: str):
         raise HTTPException(status_code=404, detail="File not found")
     description = dataset[column].describe()
 
-    metadata = load_metadata(session_id)
     dst_node_id = create_data_node(session_id, description, metadata)
     create_edge(metadata, node_id, dst_node_id, "description")
     dump_metadata(metadata, session_id)
@@ -241,7 +272,6 @@ gemini_client = genai.Client()
 
 @app.post("/gemini")
 async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
-    # Load session metadata
     metadata = load_metadata(session_id)
 
     node_summaries = []

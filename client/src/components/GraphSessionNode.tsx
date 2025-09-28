@@ -75,10 +75,10 @@ const GraphSessionNode = (props: NodeProps) => {
         <Handle type="target" position="left" />
       </ContextMenuTrigger>
       <ContextMenuContent className="w-40">
-        {props.data.columns ? (
+        {props.data.columns && props.data.columns.length > 0 ? (
           <ContextMenuSub>
             <ContextMenuSubTrigger inset>Sum</ContextMenuSubTrigger>
-            <ContextMenuSubContent>
+            <ContextMenuSubContent className="overflow-y-auto h-[30vh]">
               {props.data.columns.map((column: string) => (
                 <ContextMenuItem onClick={() => handleSum(column)}>
                   {column}
@@ -87,8 +87,42 @@ const GraphSessionNode = (props: NodeProps) => {
             </ContextMenuSubContent>
           </ContextMenuSub>
         ) : null}
-        <ContextMenuItem inset>Mean</ContextMenuItem>
-        <ContextMenuItem inset>Min</ContextMenuItem>
+        {props.data.columns && props.data.columns.length > 0 ? (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger inset>Mean</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="overflow-y-auto h-[30vh]">
+              {props.data.columns.map((column: string) => (
+                <ContextMenuItem onClick={() => handleSum(column)}>
+                  {column}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ) : null}
+        {props.data.columns && props.data.columns.length > 0 ? (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger inset>Min</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="overflow-y-auto h-[30vh]">
+              {props.data.columns.map((column: string) => (
+                <ContextMenuItem onClick={() => handleSum(column)}>
+                  {column}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ) : null}
+        {props.data.columns && props.data.columns.length > 0 ? (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger inset>Max</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="overflow-y-auto h-[30vh]">
+              {props.data.columns.map((column: string) => (
+                <ContextMenuItem onClick={() => handleSum(column)}>
+                  {column}
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ) : null}
         <ContextMenuSub>
           <ContextMenuSubTrigger inset>More Tools</ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-40">

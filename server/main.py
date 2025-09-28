@@ -9,7 +9,6 @@ import json
 import pandas as pd
 import csv
 from typing import Optional
-
 from fastmcp import Client
 from google import genai
 
@@ -159,6 +158,7 @@ def export(session_id: str, node_id: str):
 def tools_filter(
     session_id: str, node_id: str, column, filter_operator: str, filter_value: float
 ):
+    metadata = load_metadata(session_id)
     node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
     if node["type"] != "data":
         raise HTTPException(status_code=400, detail="Bad request (cannot sum scalar)")
@@ -294,7 +294,9 @@ def tools_describe(session_id: str, node_id: str, column: str):
     metadata = load_metadata(session_id)
     node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
     if node["type"] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot describe scalar)")
+        raise HTTPException(
+            status_code=400, detail="Bad request (cannot describe scalar)"
+        )
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -302,7 +304,7 @@ def tools_describe(session_id: str, node_id: str, column: str):
         raise HTTPException(status_code=404, detail="File not found")
     description = dataset[column].describe()
 
-    dst_node_id = create_data_node(session_id, description, metadata)
+    dst_node_id = create_data_node(session_id, pd.DataFrame(description), metadata)
     create_edge(metadata, node_id, dst_node_id, "description")
     dump_metadata(metadata, session_id)
 
@@ -314,7 +316,9 @@ def tools_sample(session_id: str, node_id: str, n: int):
     metadata = load_metadata(session_id)
     node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
     if node["type"] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot sample scalar)")
+        raise HTTPException(
+            status_code=400, detail="Bad request (cannot sample scalar)"
+        )
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -337,7 +341,9 @@ def tools_value_counts(session_id: str, node_id: str, column: str):
     metadata = load_metadata(session_id)
     node = next(n for n in metadata["nodes"] if n["node_id"] == node_id)
     if node["type"] != "data":
-        raise HTTPException(status_code=400, detail="Bad request (cannot value count scalar)")
+        raise HTTPException(
+            status_code=400, detail="Bad request (cannot value count scalar)"
+        )
     try:
         filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
         dataset = pd.read_csv(filepath)
@@ -407,6 +413,10 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
                 if event.candidates:
                     for part in event.candidates[0].content.parts:
                         if part.text:
-                            yield part.text
+                            yield f"TEXT::{part.text}"
+                        elif getattr(part, "function_call", None):
+                            yield f"MCP_CALL::{part.function_call.name}"
+                        elif getattr(part, "function_response", None):
+                            yield f"MCP_RESULT::{part.function_response}"
 
     return StreamingResponse(gemini_stream(), media_type="text/plain")

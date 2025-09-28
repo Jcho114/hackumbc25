@@ -22,7 +22,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+FILTER_OPERATORS = {
+    'lt': lambda x, value: x < value,
+    'gt': lambda x, value: x > value,
+    'eq': lambda x, value: x == value,
+    'ne': lambda x, value: x != value,
+    'le': lambda x, value: x <= value,
+    'ge': lambda x, value: x >= value,
+}
 
 def load_metadata(session_id):
     with open(os.path.join("sessions", session_id, "metadata.json")) as file:
@@ -71,7 +78,6 @@ def init(session_name: str):
         )
 
     return {"session_id": session_id}
-
 
 @app.get("/session/{session_id}/metadata")
 def get_metadata(session_id: str):
@@ -127,7 +133,6 @@ def upload(session_id: str, file: UploadFile):
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to upload file")
 
-
 @app.post("/session/{session_id}/export/{node_id}")
 def export(session_id: str, node_id: str):
     file_path = os.path.join("sessions", session_id, f"{node_id}.csv")
@@ -137,20 +142,24 @@ def export(session_id: str, node_id: str):
 
     return FileResponse(file_path)
 
+@app.post("/tools/filter/")
+def tools_filter(session_id: str, node_id: str, column, filter_operator: str, filter_value: float):
+    try:
+        filepath = os.path.join("sessions", session_id, f"{node_id}.csv")
+        dataset = pd.read_csv(filepath)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+    if filter_operator not in FILTER_OPERATORS:
+        raise HTTPException(status_code=400, detail="Invalid operator")
+    # trust
+    filtered = dataset[FILTER_OPERATORS[filter_operator](dataset[column], filter_value)]
 
-# @app.post("/tools/filter/{session_id}/{node_id}/{column}")
-# def tools_filter(session_id: str, node_id: str, column):
-#     try: # filter
-#         dataset = pd.read_csv(f"{session_id}/{node_id}.csv")
-#     except Exception:
-#         raise HTTPException(status_code=404, detail="File not found")
-#     filtered = dataset[column].filter()
+    metadata = load_metadata(session_id)
+    dst_node_id = create_data_node(session_id=session_id, dataframe=filtered, metadata=metadata)
+    create_edge(metadata, node_id, dst_node_id, "filter")
+    dump_metadata(metadata, session_id)
 
-#     # create dataframe node (metadata changes)
-#     create_node(dataframe=filtered, node_ids=[node_id], session_id=session_id)
-
-#     return JSONResponse(content=filtered.to_dict(), status_code=200)
-
+    return JSONResponse(content=filtered.to_dict(), status_code=200)
 
 @app.post("/tools/sum")
 def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] = None):

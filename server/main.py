@@ -45,11 +45,16 @@ def dump_metadata(metadata, session_id):
 
 
 def create_data_node(
-    session_id: str, dataframe: pd.DataFrame, metadata: Dict[str, Any]
+    session_id: str, dataframe: pd.DataFrame, metadata: Dict[str, Any], node_name: str
 ) -> str:
     new_node_id = str(uuid4())
     metadata["nodes"].append(
-        {"node_id": new_node_id, "type": "data", "columns": list(dataframe.columns)}
+        {
+            "node_id": new_node_id,
+            "node_name": node_name,
+            "type": "data",
+            "columns": list(dataframe.columns),
+        }
     )
     dataframe.to_csv(
         os.path.join("sessions", session_id, f"{new_node_id}.csv"), index=False
@@ -57,9 +62,11 @@ def create_data_node(
     return new_node_id
 
 
-def create_scalar_node(metadata, scalar) -> str:
+def create_scalar_node(metadata, scalar, node_name) -> str:
     new_node_id = str(uuid4())
-    metadata["nodes"].append({"node_id": new_node_id, "type": "scalar"})
+    metadata["nodes"].append(
+        {"node_id": new_node_id, "node_name": node_name, "type": "scalar"}
+    )
     metadata["scalar_map"][new_node_id] = scalar
     return new_node_id
 
@@ -133,7 +140,12 @@ async def upload(session_id: str, file: UploadFile):
             if "nodes" not in metadata:
                 metadata["nodes"] = []
             metadata["nodes"].append(
-                {"node_id": node_id, "type": "data", "columns": list(dataframe.columns)}
+                {
+                    "node_id": node_id,
+                    "node_name": file.filename,
+                    "type": "data",
+                    "columns": list(dataframe.columns),
+                }
             )
 
         with open(os.path.join("sessions", session_id, "metadata.json"), "w") as f:
@@ -179,7 +191,10 @@ def tools_filter(
 
     metadata = load_metadata(session_id)
     dst_node_id = create_data_node(
-        session_id=session_id, dataframe=filtered, metadata=metadata
+        session_id=session_id,
+        dataframe=filtered,
+        metadata=metadata,
+        node_name="filter()",
     )
     create_edge(metadata, node_id, dst_node_id, "filter")
     dump_metadata(metadata, session_id)
@@ -201,11 +216,11 @@ def tools_sum(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 
     if gb_col is not None:
         gb_sum = pd.DataFrame(dataset.groupby(gb_col)[column].sum())
-        dst_node_id = create_data_node(session_id, gb_sum, metadata)
+        dst_node_id = create_data_node(session_id, gb_sum, metadata, "sum()")
         content = gb_sum.to_dict()
     else:
         content = float(dataset[column].sum())
-        dst_node_id = create_scalar_node(metadata, content)
+        dst_node_id = create_scalar_node(metadata, content, f"sum({column})")
     create_edge(metadata, node_id, dst_node_id, f"sum({column})")
     dump_metadata(metadata, session_id)
 
@@ -228,11 +243,11 @@ def tools_mean(
 
     if gb_col is not None:
         gb_mean = pd.DataFrame(dataset.groupby(gb_col)[column].mean())
-        dst_node_id = create_data_node(session_id, gb_mean, metadata)
+        dst_node_id = create_data_node(session_id, gb_mean, metadata, "mean()")
         content = gb_mean.to_dict()
     else:
         content = float(dataset[column].mean())
-        dst_node_id = create_scalar_node(metadata, content)
+        dst_node_id = create_scalar_node(metadata, content, f"mean({column})")
     create_edge(metadata, node_id, dst_node_id, f"mean({column})")
     dump_metadata(metadata, session_id)
 
@@ -253,11 +268,11 @@ def tools_min(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 
     if gb_col is not None:
         gb_min = pd.DataFrame(dataset.groupby(gb_col)[column].min())
-        dst_node_id = create_data_node(session_id, gb_min, metadata)
+        dst_node_id = create_data_node(session_id, gb_min, metadata, "min()")
         content = gb_min.to_dict()
     else:
         content = float(dataset[column].min())
-        dst_node_id = create_scalar_node(metadata, content)
+        dst_node_id = create_scalar_node(metadata, content, f"min({column})")
     create_edge(metadata, node_id, dst_node_id, f"min({column})")
     dump_metadata(metadata, session_id)
 
@@ -278,11 +293,11 @@ def tools_max(session_id: str, node_id: str, column: str, gb_col: Optional[str] 
 
     if gb_col is not None:
         gb_max = pd.DataFrame(dataset.groupby(gb_col)[column].max())
-        dst_node_id = create_data_node(session_id, gb_max, metadata)
+        dst_node_id = create_data_node(session_id, gb_max, metadata, "max()")
         content = gb_max.to_dict()
     else:
         content = float(dataset[column].max())
-        dst_node_id = create_scalar_node(metadata, content)
+        dst_node_id = create_scalar_node(metadata, content, f"max({column})")
     create_edge(metadata, node_id, dst_node_id, f"max({column})")
     dump_metadata(metadata, session_id)
 
@@ -304,7 +319,9 @@ def tools_describe(session_id: str, node_id: str, column: str):
         raise HTTPException(status_code=404, detail="File not found")
     description = dataset[column].describe()
 
-    dst_node_id = create_data_node(session_id, pd.DataFrame(description), metadata)
+    dst_node_id = create_data_node(
+        session_id, pd.DataFrame(description), metadata, "describe()"
+    )
     create_edge(metadata, node_id, dst_node_id, "description")
     dump_metadata(metadata, session_id)
 
@@ -328,7 +345,7 @@ def tools_sample(session_id: str, node_id: str, n: int):
     sample = dataset.sample(n)
 
     metadata = load_metadata(session_id)
-    dst_node_id = create_data_node(session_id, sample, metadata)
+    dst_node_id = create_data_node(session_id, sample, metadata, "sample()")
 
     create_edge(metadata, node_id, dst_node_id, "sample")
     dump_metadata(metadata, session_id)
@@ -352,7 +369,7 @@ def tools_value_counts(session_id: str, node_id: str, column: str):
     value_counts = dataset[column].value_counts()
 
     metadata = load_metadata(session_id)
-    dst_node_id = create_data_node(session_id, value_counts, metadata)
+    dst_node_id = create_data_node(session_id, value_counts, metadata, "value_counts()")
     create_edge(metadata, node_id, dst_node_id, "description")
     dump_metadata(metadata, session_id)
 

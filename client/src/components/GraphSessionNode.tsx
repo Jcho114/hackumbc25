@@ -67,10 +67,12 @@ const GraphSessionNode = (props: NodeProps) => {
     <ContextMenu>
       <ContextMenuTrigger
         className={cn(
-          "border-solid flex px-4 py-4 w-[140px] h-[40px] items-center justify-center rounded-md border border-black"
+          "border-solid flex px-4 py-4 w-[160px] h-[40px] items-center justify-center rounded-md border border-black"
         )}
       >
-        <h1 className="text-sm truncate w-full text-center">{props.id}</h1>
+        <h1 className="truncate w-full text-center text-xs">
+          {props.data.label}
+        </h1>
         <Handle type="source" position="right" />
         <Handle type="target" position="left" />
       </ContextMenuTrigger>

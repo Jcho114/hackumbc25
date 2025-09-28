@@ -20,12 +20,13 @@ interface GraphProps {
 
 function toGraphNodes(nodes: SessionNode[]) {
   return nodes.map((node: SessionNode) => {
+    console.log(node.node_name);
     return {
       id: node.node_id,
       position: { x: Math.random() * 1000, y: Math.random() * 800 },
       type: "graphSessionNode",
       data: {
-        label: node.node_id,
+        label: node.node_name,
         columns: node.columns || [],
       },
     };
@@ -37,7 +38,7 @@ function toGraphEdges(edges: SessionEdge[]) {
     id: `${edge.src_id}-${edge.dst_id}`,
     source: edge.src_id,
     target: edge.dst_id,
-    label: edge.operation,
+    // label: edge.operation,
     labelBgStyle: { fill: "#f9fafb" },
     markerEnd: {
       type: "arrowclosed",

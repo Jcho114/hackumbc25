@@ -15,6 +15,7 @@ export async function createSession(sessionName: string) {
 
 export interface SessionNode {
   node_id: string;
+  node_name: string;
   type: "data" | "scalar";
   columns: string[] | null;
 }

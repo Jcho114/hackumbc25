@@ -53,7 +53,7 @@ def create_data_node(
             "node_id": new_node_id,
             "node_name": node_name,
             "type": "data",
-            "columns": list(dataframe.columns),
+            "columns": 1 if isinstance(dataframe, pd.Series) else list(dataframe.columns),
         }
     )
     dataframe.to_csv(
@@ -76,6 +76,27 @@ def create_edge(metadata, src_id: str, dst_id: str, operation: str):
         {"src_id": src_id, "dst_id": dst_id, "operation": operation}
     )
 
+def delete_node_helper(session_id: str, node_id: str, metadata):
+    base_path = f"sessions/{session_id}"
+    edges = metadata["edges"]
+    node_id_exists = False
+    node_id_idx = 0
+    for index,node in enumerate(metadata["nodes"]):
+        if node["node_id"] == node_id:
+            node_id_exists = True
+            node_id_idx = index
+            break
+    if not node_id_exists:
+        raise HTTPException(status_code=404, detail=f"{node_id} Node not in metadata")
+    
+    # Recursively delete "child" nodes and edges
+    edges = [edge for edge in edges if edge["src_id"] != node_id or not delete_node_helper(session_id, edge["dst_id"], metadata)]
+    
+    # delete this node
+    del metadata["nodes"][node_id_idx]
+    node_file_path = os.path.join(base_path, f"{node_id}.csv") 
+    if os.path.exists(node_file_path):
+        os.remove(node_file_path)
 
 @app.post("/session/init")
 def init(session_name: str):
@@ -437,3 +458,13 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
                             yield f"MCP_RESULT::{part.function_response}"
 
     return StreamingResponse(gemini_stream(), media_type="text/plain")
+
+@app.post("/tools/delete_node")
+def delete_node(session_id: str, node_id: str):
+    # try:
+        metadata = load_metadata(session_id)
+        delete_node_helper(session_id, node_id, metadata)
+        dump_metadata(session_id=session_id, metadata=metadata)
+        return JSONResponse(content="Node successfully deleted",status_code=200)
+    # except Exception:
+    #     raise HTTPException(status_code=404, detail="File not found")

@@ -92,7 +92,7 @@ const NodeInfo = ({ nodeId }: NodeInfoProps) => {
     );
   }
 
-  if (!data?.data || !data?.scalar) {
+  if (!data?.data) {
     return <p>Data not found</p>;
   }
 

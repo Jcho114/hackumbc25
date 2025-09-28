@@ -1,3 +1,5 @@
+# Graphlytix
+
 ## Inspiration
 
 We were inspired by the idea of making data analysis more intuitive, visual, and interactive—something that feels more like sketching ideas than writing complex code. Most data tools are either too technical or too limiting, so we set out to build a system where users could see every transformation in a graph and explore data visually while still having access to powerful operations. With Graphlytix, we wanted to merge the accessibility of a no-code interface with the power and transparency of code-driven workflows.

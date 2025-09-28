@@ -166,7 +166,7 @@ def export(session_id: str, node_id: str):
     return FileResponse(file_path)
 
 
-@app.post("/tools/filter/")
+@app.post("/tools/filter")
 def tools_filter(
     session_id: str, node_id: str, column, filter_operator: str, filter_value: float
 ):
@@ -320,7 +320,7 @@ def tools_describe(session_id: str, node_id: str, column: str):
     description = dataset[column].describe()
 
     dst_node_id = create_data_node(
-        session_id, pd.DataFrame(description), metadata, "describe()"
+        session_id, pd.DataFrame(description), metadata, f"describe({column})"
     )
     create_edge(metadata, node_id, dst_node_id, "description")
     dump_metadata(metadata, session_id)
@@ -350,7 +350,10 @@ def tools_sample(session_id: str, node_id: str, n: int):
     create_edge(metadata, node_id, dst_node_id, "sample")
     dump_metadata(metadata, session_id)
 
-    return JSONResponse(content=sample.to_dict(), status_code=200)
+    return JSONResponse(
+        content=sample.where(pd.notnull(sample), None).to_dict(),
+        status_code=200,
+    )
 
 
 @app.post("/tools/value_counts")
@@ -369,7 +372,9 @@ def tools_value_counts(session_id: str, node_id: str, column: str):
     value_counts = dataset[column].value_counts()
 
     metadata = load_metadata(session_id)
-    dst_node_id = create_data_node(session_id, value_counts, metadata, "value_counts()")
+    dst_node_id = create_data_node(
+        session_id, pd.DataFrame(value_counts), metadata, f"value_counts({column})"
+    )
     create_edge(metadata, node_id, dst_node_id, "description")
     dump_metadata(metadata, session_id)
 
@@ -378,6 +383,20 @@ def tools_value_counts(session_id: str, node_id: str, column: str):
 
 mcp_client = Client("http://localhost:9000/mcp")
 gemini_client = genai.Client()
+
+SYSTEM_PROMPT = """
+You are an AI assistant that can analyze session data, including nodes of type 'data' and 'scalar'. 
+Any tool calls you make (e.g., reading CSVs, querying scalars) will automatically be visualized in a graph for the user. 
+
+Do NOT return raw data from nodes of type 'data' (e.g., CSVs, dataframes, or samples). 
+You MAY return small scalar values from nodes of type 'scalar' if relevant. 
+
+When referring to nodes, NEVER mention node IDs. Always use the node names/titles instead. 
+
+Focus on interpreting, summarizing, or providing instructions or insights based on the session. 
+All outputs from 'data' nodes are already captured and displayed on the graph, so returning them in the stream is unnecessary. 
+Keep responses concise, human-readable, and actionable.
+"""
 
 
 @app.post("/gemini")
@@ -397,6 +416,7 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
                     df = pd.read_csv(filepath, nrows=sample_rows)
                     node_summaries.append(
                         {
+                            "node_name": node["node_name"],
                             "node_id": node_id,
                             "columns": df.columns.tolist(),
                             "sample_data": df.head(sample_rows).to_dict(orient="list"),
@@ -405,13 +425,18 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
                     )
                 except Exception:
                     node_summaries.append(
-                        {"node_id": node_id, "error": "Could not read CSV"}
+                        {
+                            "node_id": node_id,
+                            "node_name": node["node_name"],
+                            "error": "Could not read CSV",
+                        }
                     )
         elif node_type == "scalar":
             scalar_value = metadata.get("scalar_map", {}).get(node_id, None)
             node_summaries.append({"node_id": node_id, "scalar_value": scalar_value})
 
     prompt_text = (
+        f"{SYSTEM_PROMPT}\n\n"
         f"Session ID: {session_id}\n"
         f"Node summaries: {node_summaries}\n"
         f"Instruction: {prompt}"
@@ -430,10 +455,10 @@ async def call_gemini(session_id: str, prompt: str, sample_rows: int = 5):
                 if event.candidates:
                     for part in event.candidates[0].content.parts:
                         if part.text:
-                            yield f"TEXT::{part.text}"
+                            yield f"TEXT::{part.text}\n"
                         elif getattr(part, "function_call", None):
-                            yield f"MCP_CALL::{part.function_call.name}"
+                            yield f"MCP_CALL::{part.function_call.name}\n"
                         elif getattr(part, "function_response", None):
-                            yield f"MCP_RESULT::{part.function_response}"
+                            yield f"MCP_RESULT::{part.function_response}\n"
 
     return StreamingResponse(gemini_stream(), media_type="text/plain")

@@ -64,7 +64,7 @@ const Chat = () => {
 
         chunk.split("\n").forEach((line) => {
           if (line.startsWith("TEXT::")) {
-            assistantText += line.replace("TEXT::", "");
+            assistantText += line.slice(6);
             setMessages((prev) => {
               if (prev.length === 0) return prev;
               const updated = [...prev];

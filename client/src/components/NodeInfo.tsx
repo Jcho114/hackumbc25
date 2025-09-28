@@ -34,12 +34,13 @@ const NodeInfo = ({ nodeId }: NodeInfoProps) => {
   const queryKey = ["metadata", sessionId];
   const metadata = queryClient.getQueryData(queryKey) as SessionMetadata;
   const nodeInfo = metadata.nodes.find((node) => node.node_id === nodeId);
+  const scalarMap = metadata.scalar_map;
 
   const { data, isPending, error } = useQuery({
     queryKey: ["nodedata", nodeId],
     queryFn: async () => {
       if (!nodeInfo || nodeInfo.type === "scalar") {
-        return { scalar: 10 };
+        return { scalar: scalarMap[nodeId] };
       }
       const data = await getNodeContents(sessionId || "", nodeId);
       return { data: data };
